@@ -54,6 +54,75 @@ const FRONT_LOADER = `
 /*  Définition des appareils                                           */
 /* ------------------------------------------------------------------ */
 const APPLIANCES = {
+  /* ---------------- Générique, prises, lumières ---------------- */
+  generic: {
+    label: 'Appareil générique', on: 'En marche', off: 'À l’arrêt', threshold: 5, lcd: lcdPower,
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect class="body" x="14" y="14" width="72" height="72" rx="14"/>
+  <rect class="screen" x="26" y="22" width="48" height="16" rx="3"/>
+  <text class="lcd" x="50" y="34" font-size="10" data-lcd>--</text>
+  <circle class="ring genring" cx="50" cy="62" r="16"/>
+  <path class="gpower" d="M57.78 55.45a11 11 0 1 1-15.56 0M50 51v11"/>
+  <g class="fx"><circle ${AN('ripple', 50, 62)} cx="50" cy="62" r="18" fill="none" stroke="#4cd964" stroke-width="1.6"/></g>
+  <circle class="led" cx="74" cy="76" r="2.2"/>
+</svg>`,
+    css: `.genring{fill:#e9edf2}
+.gpower{fill:none;stroke:#8a94a3;stroke-width:3;stroke-linecap:round;transition:stroke .4s}
+.on .gpower{stroke:#4cd964}`,
+  },
+
+  smartplug: {
+    label: 'Prise connectée', on: 'Alimente un appareil', off: 'Au repos', threshold: 2, lcd: lcdPower,
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect class="body" x="18" y="10" width="64" height="80" rx="16"/>
+  <circle class="ring plugring" cx="50" cy="40" r="24"/>
+  <circle cx="50" cy="40" r="19" fill="#e9edf2" stroke="#c9d0da"/>
+  <circle class="dark" cx="42" cy="40" r="3.2"/><circle class="dark" cx="58" cy="40" r="3.2"/>
+  <rect class="mid" x="48.5" y="25" width="3" height="7" rx="1.5"/>
+  <g class="fx"><circle ${AN('ripple', 50, 40)} cx="50" cy="40" r="24" fill="none" stroke="#4cd964" stroke-width="1.6"/></g>
+  <rect class="screen" x="30" y="70" width="40" height="13" rx="3"/>
+  <text class="lcd" x="50" y="79.6" font-size="8" data-lcd>--</text>
+  <circle class="led" cx="72" cy="20" r="2.4"/><circle class="mid" cx="28" cy="20" r="3"/>
+</svg>`,
+    css: `.plugring{fill:#dfe4ea;transition:stroke .4s}.on .plugring{stroke:#4cd964;stroke-width:2.4}`,
+  },
+
+  bulb: {
+    label: 'Ampoule', on: 'Allumée', off: 'Éteinte', threshold: 0.5,
+    lcd: (v) =>
+      v.st?.attributes?.brightness != null
+        ? `${Math.round(v.st.attributes.brightness / 2.55)}%`
+        : lcdPower(v),
+    // Reprend la couleur et la luminosité de l'ampoule si l'entité (light.*) les fournit
+    update: (svg, v) => {
+      const a = v.st?.attributes || {};
+      const rgb = a.rgb_color;
+      svg.style.setProperty('--bulb', Array.isArray(rgb) ? `rgb(${rgb.join(',')})` : '#ffd98a');
+      svg.style.setProperty('--lvl', a.brightness != null ? Math.max(0.25, a.brightness / 255) : 1);
+    },
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <g class="fx">
+    <circle class="glow" cx="50" cy="38" r="40"/>
+    <path ${AN('pulse rays')} d="M50 2v6M14 16l4 4M86 16l-4 4M4 40h6M96 40h-6"/>
+  </g>
+  <rect class="bulbglass" x="40" y="56" width="20" height="12"/>
+  <circle class="bulbglass" cx="50" cy="38" r="24"/>
+  <path class="fil" d="M44 66V52l3-6 3 6 3-6 3 6v14"/>
+  <rect class="dark" x="39" y="68" width="22" height="20" rx="3"/>
+  <path d="M39 73h22M39 78h22" stroke="#8a94a3" stroke-width="1.5"/>
+  <text class="lcd" x="50" y="86" font-size="5.5" data-lcd>--</text>
+  <path class="mid" d="M44 88h12l-2 6h-8z"/>
+</svg>`,
+    css: `.bulbglass{fill:#e8ecf1;stroke:#aab3bf;stroke-width:1.2;transition:fill .4s}
+.on .bulbglass{fill:var(--bulb,#ffe28a)}
+.glow{fill:var(--bulb,#ffd98a);opacity:calc(var(--lvl,1)*.4)}
+.rays{fill:none;stroke:var(--bulb,#ffd98a);stroke-width:2.2;stroke-linecap:round}
+.fil{fill:none;stroke:#aab3bf;stroke-width:1.6;stroke-linejoin:round}.on .fil{stroke:#fff}`,
+  },
+
   /* ---------------- Linge & vaisselle ---------------- */
   washer: {
     label: 'Lave-linge', on: 'En cycle', off: 'À l’arrêt', threshold: 10, lcd: lcdPower,
@@ -459,7 +528,7 @@ const APPLIANCES = {
   },
 
   solarbattery: {
-    label: 'Batterie solaire', on: 'Charge / décharge', off: 'Au repos', threshold: 20, lcd: lcdPct,
+    label: 'Batterie solaire', battery: true, on: 'Charge / décharge', off: 'Au repos', threshold: 20, lcd: lcdPct,
     update: (svg, v) =>
       svg.style.setProperty('--p', Math.max(0, Math.min(1, (v.prog ?? 50) / 100))),
     svg: `
@@ -497,7 +566,7 @@ const APPLIANCES = {
 
   /* ---------------- Robots, outils, ventilation ---------------- */
   vacuum: {
-    label: 'Robot aspirateur', on: 'Nettoyage en cours', off: 'À la base', threshold: 5, lcd: lcdPct,
+    label: 'Robot aspirateur', battery: true, on: 'Nettoyage en cours', off: 'À la base', threshold: 5, lcd: lcdPct,
     svg: `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <rect class="body" x="6" y="6" width="88" height="88" rx="8"/>
@@ -513,7 +582,7 @@ const APPLIANCES = {
   },
 
   mower: {
-    label: 'Robot tondeuse', on: 'Tonte en cours', off: 'À la base', threshold: 5,
+    label: 'Robot tondeuse', battery: true, on: 'Tonte en cours', off: 'À la base', threshold: 5,
     svg: `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <rect width="100" height="100" fill="#dff1ff"/>
@@ -548,7 +617,7 @@ const APPLIANCES = {
   },
 
   toolcharger: {
-    label: 'Chargeur d’outils', on: 'En charge', off: 'Libre', threshold: 5, lcd: lcdPower,
+    label: 'Chargeur d’outils', battery: true, on: 'En charge', off: 'Libre', threshold: 5, lcd: lcdPower,
     svg: `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <rect class="body" x="10" y="64" width="80" height="26" rx="6"/>
@@ -698,6 +767,7 @@ class MesAppareilsCard extends HTMLElement {
       entity: 'Entité principale (état / prise)',
       power: 'Capteur de puissance (W)',
       energy: 'Capteur d’énergie (kWh)',
+      cost: 'Capteur de coût (€)',
       temperature: 'Capteur de température',
       door: 'Capteur de porte (binary_sensor)',
       progress: 'Progression / batterie (%)',
@@ -720,6 +790,7 @@ class MesAppareilsCard extends HTMLElement {
         { name: 'entity', selector: { entity: {} } },
         { name: 'power', selector: { entity: { domain: 'sensor' } } },
         { name: 'energy', selector: { entity: { domain: 'sensor' } } },
+        { name: 'cost', selector: { entity: { domain: 'sensor' } } },
         { name: 'temperature', selector: { entity: { domain: 'sensor' } } },
         { name: 'door', selector: { entity: { domain: 'binary_sensor' } } },
         { name: 'progress', selector: { entity: { domain: 'sensor' } } },
@@ -832,7 +903,7 @@ class MesAppareilsCard extends HTMLElement {
         ? def.openLabel
         : on ? def.on : def.off;
 
-    const ctx = { on, power, temp, prog, fmt: this._fmt.bind(this) };
+    const ctx = { on, power, temp, prog, st, fmt: this._fmt.bind(this) };
     const lcd = root.querySelector('[data-lcd]');
     if (lcd && def.lcd) lcd.textContent = def.lcd(ctx);
     const svg = root.querySelector('.art svg');
@@ -849,7 +920,12 @@ class MesAppareilsCard extends HTMLElement {
       }
     }
     if (temp !== null) chips.push(`${this._fmt(temp)} °C`);
-    if (prog !== null) chips.push(`${this._fmt(prog)} %`);
+    const costVal = this._num(c.cost);
+    if (costVal !== null) {
+      const cu = h.states[c.cost].attributes.unit_of_measurement;
+      chips.push(`Coût ${this._fmt(costVal)} ${!cu || cu === 'EUR' ? '€' : cu}`);
+    }
+    if (prog !== null) chips.push(`${def.battery ? 'Batterie' : 'Progression'} ${this._fmt(prog)} %`);
     if (c.remaining) {
       const r = h.states[c.remaining];
       if (r && !['unavailable', 'unknown'].includes(r.state)) {
