@@ -1103,8 +1103,8 @@ window.customCards = window.customCards || [];
 // Une carte « Mes appareils (liste déroulante) » pour les anciennes configs...
 window.customCards.push({
   type: 'mes-appareils-card',
-  name: 'Mes appareils (liste déroulante)',
-  description: 'Choisis l’appareil dans une liste (appliance: …).',
+  name: 'Yodapp - Liste déroulante',
+  description: 'Yodapp : choisis l’appareil dans une liste (appliance: …).',
   preview: false,
 });
 
@@ -1129,8 +1129,8 @@ for (const [key, def] of Object.entries(APPLIANCES)) {
   }
   window.customCards.push({
     type: tag,
-    name: def.label,
-    description: `Carte animée : ${def.label.toLowerCase()}`,
+    name: `Yodapp - ${def.label}`,
+    description: `Yodapp : carte animée ${def.label.toLowerCase()}`,
     preview: false,
   });
 }
