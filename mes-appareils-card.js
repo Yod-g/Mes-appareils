@@ -10,7 +10,7 @@
 
 const ACTIVE_STATES = [
   'on', 'running', 'printing', 'washing', 'drying', 'heating', 'cooling',
-  'active', 'in_progress', 'prepare', 'cleaning', 'charging', 'cleaning',
+  'active', 'in_progress', 'prepare', 'cleaning', 'charging', 'opening', 'closing',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -40,6 +40,15 @@ const blades = (cx, cy, r, n = 4, fill = '#9aa5b3') => {
 const lcdPower = (v) => (v.on && v.power !== null ? `${Math.round(v.power)}W` : '--');
 const lcdTemp = (v) => (v.temp !== null ? `${v.fmt(v.temp)}°` : lcdPower(v));
 const lcdPct = (v) => (v.prog !== null ? `${Math.round(v.prog)}%` : lcdPower(v));
+
+// Couleur Tempo à partir d'un texte (bleu/blanc/rouge, blue/white/red, ou codes HCJB, HPJW…)
+const tempoColor = (txt) => {
+  const t = String(txt || '').toLowerCase();
+  if (/bleu|blue|j_?b$/.test(t)) return ['#2f7bff', 'Bleu'];
+  if (/blanc|white|j_?w$/.test(t)) return ['#f5f5f5', 'Blanc'];
+  if (/rouge|red|j_?r$/.test(t)) return ['#ff3b30', 'Rouge'];
+  return ['#9aa5b3', '—'];
+};
 
 // Façade commune lave-linge / sèche-linge
 const FRONT_LOADER = `
@@ -121,6 +130,87 @@ const APPLIANCES = {
 .glow{fill:var(--bulb,#ffd98a);opacity:calc(var(--lvl,1)*.4)}
 .rays{fill:none;stroke:var(--bulb,#ffd98a);stroke-width:2.2;stroke-linecap:round}
 .fil{fill:none;stroke:#aab3bf;stroke-width:1.6;stroke-linejoin:round}.on .fil{stroke:#fff}`,
+  },
+
+  colorbulb: {
+    label: 'Ampoule colorée', on: 'Allumée', off: 'Éteinte', threshold: 0.5, entityLabel: 'Ampoule (light.…)',
+    lcd: (v) =>
+      v.st?.attributes?.brightness != null
+        ? `${Math.round(v.st.attributes.brightness / 2.55)}%`
+        : lcdPower(v),
+    // Couleur réelle si l'entité la fournit, sinon cycle d'arc-en-ciel quand elle est allumée
+    update: (svg, v) => {
+      const a = v.st?.attributes || {};
+      const rgb = a.rgb_color;
+      const fixed = Array.isArray(rgb);
+      svg.classList.toggle('fixed', fixed);
+      svg.style.setProperty('--bulb', fixed ? `rgb(${rgb.join(',')})` : '#ffd98a');
+      svg.style.setProperty('--lvl', a.brightness != null ? Math.max(0.25, a.brightness / 255) : 1);
+    },
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <g class="fx">
+    <circle ${AN('rbf glow')} cx="50" cy="38" r="40"/>
+    <g ${AN('rbs')}><path ${AN('pulse crays')} d="M50 2v6M14 16l4 4M86 16l-4 4M4 40h6M96 40h-6"/></g>
+  </g>
+  <rect ${AN('rbf bulbglass')} x="40" y="56" width="20" height="12"/>
+  <circle ${AN('rbf bulbglass')} cx="50" cy="38" r="24"/>
+  <path class="fil" d="M44 66V52l3-6 3 6 3-6 3 6v14"/>
+  <rect class="dark" x="39" y="68" width="22" height="20" rx="3"/>
+  <path d="M39 72h22" stroke="#ff4d4d" stroke-width="1.6"/>
+  <path d="M39 77h22" stroke="#5ee07a" stroke-width="1.6"/>
+  <path d="M39 82h22" stroke="#4dc3ff" stroke-width="1.6"/>
+  <text class="lcd" x="50" y="87.4" font-size="5" data-lcd>--</text>
+  <path class="mid" d="M44 88h12l-2 6h-8z"/>
+</svg>`,
+    css: `.bulbglass{fill:#e8ecf1;stroke:#aab3bf;stroke-width:1.2;transition:fill .4s}
+.on .bulbglass{fill:var(--bulb,#ffe28a)}
+.glow{fill:var(--bulb,#ffd98a);opacity:calc(var(--lvl,1)*.4)}
+.crays{fill:none;stroke:inherit;stroke-width:2.2;stroke-linecap:round}
+.fil{fill:none;stroke:#aab3bf;stroke-width:1.6;stroke-linejoin:round}.on .fil{stroke:#fff}`,
+  },
+
+  shutter: {
+    label: 'Volet électrique', on: 'En mouvement', off: 'À l’arrêt', threshold: 0, entityLabel: 'Volet (cover.…)',
+    status: (v) => {
+      const s = v.st?.state;
+      const pct = v.pos != null ? ` ${Math.round(v.pos)} %` : '';
+      if (s === 'opening') return `Ouverture…${pct}`;
+      if (s === 'closing') return `Fermeture…${pct}`;
+      if (s === 'closed') return 'Fermé';
+      if (s === 'open') return v.pos != null && v.pos < 100 ? `Ouvert à ${Math.round(v.pos)} %` : 'Ouvert';
+      return null;
+    },
+    // 100 % = volet ouvert (lames remontées), 0 % = fermé
+    update: (svg, v) => {
+      let pos = v.pos;
+      if (pos == null) pos = v.st?.state === 'closed' ? 0 : v.st?.state === 'open' ? 100 : 50;
+      pos = Math.max(0, Math.min(100, pos));
+      svg.style.setProperty('--sy', `${-(pos / 100) * 64}px`);
+    },
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="slat" width="10" height="7" patternUnits="userSpaceOnUse">
+      <rect width="10" height="7" fill="#d9dee6"/><rect y="5.2" width="10" height="1.8" fill="#aab3bf"/>
+    </pattern>
+    <clipPath id="shc"><rect x="18" y="22" width="64" height="62"/></clipPath>
+  </defs>
+  <rect x="18" y="22" width="64" height="62" fill="#bfe3f7"/>
+  <circle cx="66" cy="38" r="7" fill="#ffd54a"/>
+  <path d="M18 84V68q16-10 32 0t32-4V84z" fill="#7fc067"/>
+  <g clip-path="url(#shc)">
+    <g class="slats">
+      <rect x="18" y="22" width="64" height="58" fill="url(#slat)"/>
+      <rect class="mid" x="18" y="80" width="64" height="4"/>
+    </g>
+  </g>
+  <rect x="18" y="22" width="64" height="62" fill="none" stroke="#8a94a3" stroke-width="2"/>
+  <rect class="body" x="10" y="8" width="80" height="16" rx="3"/>
+  <circle class="led" cx="80" cy="16" r="2.2"/>
+  <rect class="mid" x="12" y="84" width="76" height="5" rx="2"/>
+</svg>`,
+    css: `svg{--sy:-32px}.slats{transform:translateY(var(--sy));transition:transform 1s linear}`,
   },
 
   /* ---------------- Linge & vaisselle ---------------- */
@@ -527,6 +617,41 @@ const APPLIANCES = {
     css: `.led2{fill:#9aa5b3}.on .led2{fill:#ffb300}`,
   },
 
+  linkytempo: {
+    label: 'Linky offre Tempo', on: 'Consommation en cours', off: 'Aucune consommation', threshold: 1,
+    extra: ['tempo_today', 'tempo_tomorrow', 'hc'],
+    lcd: (v) => (v.power !== null ? `${Math.round(v.power)}W` : '--'),
+    status: (v) =>
+      `Aujourd’hui : ${tempoColor(v.get(v.cfg.tempo_today))[1]} · Demain : ${tempoColor(v.get(v.cfg.tempo_tomorrow))[1]}`,
+    update: (svg, v) => {
+      svg.style.setProperty('--t1', tempoColor(v.get(v.cfg.tempo_today))[0]);
+      svg.style.setProperty('--t2', tempoColor(v.get(v.cfg.tempo_tomorrow))[0]);
+      const hs = String(v.get(v.cfg.hc) || '').toLowerCase();
+      const isHC = hs === 'on' || /creuse|^hc/.test(hs);
+      const isHP = hs === 'off' || /pleine|^hp/.test(hs);
+      const txt = svg.querySelector('[data-hphc]');
+      if (txt) txt.textContent = isHC ? 'HC' : isHP ? 'HP' : '--';
+      svg.style.setProperty('--hpc', isHC ? '#9be3a8' : isHP ? '#ffd9a0' : '#dde2e9');
+    },
+    svg: `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect class="body" x="22" y="6" width="56" height="88" rx="6"/>
+  <rect x="22" y="6" width="56" height="14" rx="6" fill="#8bc34a"/><rect x="22" y="14" width="56" height="6" fill="#8bc34a"/>
+  <text x="50" y="16.5" text-anchor="middle" font-size="7" font-weight="700" fill="#fff" font-family="sans-serif">linky</text>
+  <rect class="screen" x="28" y="25" width="44" height="17" rx="2"/>
+  <text class="lcd" x="50" y="37.5" font-size="10" data-lcd>--</text>
+  <text class="tlabel" x="38" y="51">AUJ.</text><text class="tlabel" x="62" y="51">DEM.</text>
+  <circle class="tday" cx="38" cy="62" r="9"/><circle class="tday2" cx="62" cy="62" r="9"/>
+  <rect class="hpc" x="34" y="76" width="32" height="12" rx="6"/>
+  <text class="hpctxt" x="50" y="85" data-hphc>--</text>
+</svg>`,
+    css: `.tlabel{font:600 5px sans-serif;text-anchor:middle;fill:#6b7685}
+.tday{fill:var(--t1,#9aa5b3);stroke:#8a94a3;stroke-width:1.2}
+.tday2{fill:var(--t2,#9aa5b3);stroke:#8a94a3;stroke-width:1.2}
+.hpc{fill:var(--hpc,#dde2e9);stroke:#aab3bf}
+.hpctxt{font:700 7px sans-serif;text-anchor:middle;fill:#3b4350}`,
+  },
+
   solarbattery: {
     label: 'Batterie solaire', battery: true, on: 'Charge / décharge', off: 'Au repos', threshold: 20, lcd: lcdPct,
     update: (svg, v) =>
@@ -746,6 +871,13 @@ ha-card{--ac-accent:var(--primary-color);overflow:hidden;cursor:pointer}
 @keyframes ripple{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.2);opacity:0}}
 @keyframes wave{to{transform:translateX(20px)}}
 
+.rbf{animation:rbfill 6s linear infinite}
+.rbs{animation:rbstroke 6s linear infinite}
+svg.fixed .rbf,svg.fixed .rbs{animation:none}
+svg.fixed .rbs{stroke:var(--bulb)}
+@keyframes rbfill{0%,100%{fill:#ff4d4d}17%{fill:#ffb84d}33%{fill:#f5e050}50%{fill:#5ee07a}67%{fill:#4dc3ff}83%{fill:#b06bff}}
+@keyframes rbstroke{0%,100%{stroke:#ff4d4d}17%{stroke:#ffb84d}33%{stroke:#f5e050}50%{stroke:#5ee07a}67%{stroke:#4dc3ff}83%{stroke:#b06bff}}
+
 /* Pause quand l'appareil est à l'arrêt (prioritaire sur les raccourcis "animation") */
 .anim{animation-play-state:paused!important}
 .on .anim{animation-play-state:running!important}
@@ -760,11 +892,13 @@ class MesAppareilsCard extends HTMLElement {
     return { appliance: 'washer' };
   }
 
-  static getConfigForm() {
+  // Formulaire de l'éditeur visuel. appliance = null -> carte "à liste déroulante"
+  static buildForm(appliance) {
+    const def = appliance ? APPLIANCES[appliance] : null;
     const labels = {
       appliance: 'Appareil',
       name: 'Nom (facultatif)',
-      entity: 'Entité principale (état / prise)',
+      entity: def?.entityLabel || 'Entité principale (état / prise)',
       power: 'Capteur de puissance (W)',
       energy: 'Capteur d’énergie (kWh)',
       cost: 'Capteur de coût (€)',
@@ -772,33 +906,43 @@ class MesAppareilsCard extends HTMLElement {
       door: 'Capteur de porte (binary_sensor)',
       progress: 'Progression / batterie (%)',
       remaining: 'Temps restant',
+      tempo_today: 'Couleur Tempo aujourd’hui (capteur)',
+      tempo_tomorrow: 'Couleur Tempo demain (capteur)',
+      hc: 'Heures creuses (capteur HC/HP)',
       threshold: 'Seuil « en marche » (W)',
     };
-    return {
-      schema: [
-        {
-          name: 'appliance',
-          required: true,
-          selector: {
-            select: {
-              mode: 'dropdown',
-              options: Object.entries(APPLIANCES).map(([value, d]) => ({ value, label: d.label })),
-            },
+    const sensor = (name) => ({ name, selector: { entity: { domain: 'sensor' } } });
+    const schema = [];
+    if (!appliance) {
+      schema.push({
+        name: 'appliance',
+        required: true,
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: Object.entries(APPLIANCES).map(([value, d]) => ({ value, label: d.label })),
           },
         },
-        { name: 'name', selector: { text: {} } },
-        { name: 'entity', selector: { entity: {} } },
-        { name: 'power', selector: { entity: { domain: 'sensor' } } },
-        { name: 'energy', selector: { entity: { domain: 'sensor' } } },
-        { name: 'cost', selector: { entity: { domain: 'sensor' } } },
-        { name: 'temperature', selector: { entity: { domain: 'sensor' } } },
-        { name: 'door', selector: { entity: { domain: 'binary_sensor' } } },
-        { name: 'progress', selector: { entity: { domain: 'sensor' } } },
-        { name: 'remaining', selector: { entity: { domain: 'sensor' } } },
-        { name: 'threshold', selector: { number: { min: 0, max: 5000, mode: 'box' } } },
-      ],
-      computeLabel: (s) => labels[s.name] || s.name,
-    };
+      });
+    }
+    schema.push(
+      { name: 'name', selector: { text: {} } },
+      { name: 'entity', selector: { entity: {} } },
+      sensor('power'), sensor('energy'), sensor('cost'), sensor('temperature'),
+      { name: 'door', selector: { entity: { domain: 'binary_sensor' } } },
+      sensor('progress'), sensor('remaining')
+    );
+    ['tempo_today', 'tempo_tomorrow', 'hc'].forEach((n) => {
+      if (!def || (def.extra || []).includes(n)) {
+        schema.push({ name: n, selector: { entity: { domain: ['sensor', 'binary_sensor'] } } });
+      }
+    });
+    schema.push({ name: 'threshold', selector: { number: { min: 0, max: 5000, mode: 'box' } } });
+    return { schema, computeLabel: (sc) => labels[sc.name] || sc.name };
+  }
+
+  static getConfigForm() {
+    return MesAppareilsCard.buildForm(null);
   }
 
   setConfig(config) {
@@ -896,14 +1040,20 @@ class MesAppareilsCard extends HTMLElement {
     card.classList.toggle('on', on && !unavailable);
     card.classList.toggle('open', open);
 
+    const attrs = st?.attributes || {};
+    const pos = attrs.current_position != null ? Number(attrs.current_position) : prog;
+    const ctx = {
+      on, power, temp, prog, pos, st, cfg: c,
+      get: (id) => (id ? h.states[id]?.state : undefined),
+      fmt: this._fmt.bind(this),
+    };
     root.querySelector('.name').textContent = c.name || def.label;
     root.querySelector('.status').textContent = unavailable
       ? 'Indisponible'
       : open && def.openLabel
         ? def.openLabel
-        : on ? def.on : def.off;
+        : (def.status && def.status(ctx)) || (on ? def.on : def.off);
 
-    const ctx = { on, power, temp, prog, st, fmt: this._fmt.bind(this) };
     const lcd = root.querySelector('[data-lcd]');
     if (lcd && def.lcd) lcd.textContent = def.lcd(ctx);
     const svg = root.querySelector('.art svg');
@@ -949,9 +1099,38 @@ if (!customElements.get('mes-appareils-card')) {
 }
 
 window.customCards = window.customCards || [];
+
+// Une carte « Mes appareils (liste déroulante) » pour les anciennes configs...
 window.customCards.push({
   type: 'mes-appareils-card',
-  name: 'Mes appareils',
-  description: 'Cartes animées pour l’électroménager, la maison et l’informatique.',
+  name: 'Mes appareils (liste déroulante)',
+  description: 'Choisis l’appareil dans une liste (appliance: …).',
   preview: false,
 });
+
+// ...et une carte distincte par appareil, trouvable dans la recherche du sélecteur de cartes
+for (const [key, def] of Object.entries(APPLIANCES)) {
+  const tag = `mes-appareil-${key}`;
+  if (!customElements.get(tag)) {
+    customElements.define(
+      tag,
+      class extends MesAppareilsCard {
+        setConfig(config) {
+          super.setConfig({ ...config, appliance: key });
+        }
+        static getStubConfig() {
+          return {};
+        }
+        static getConfigForm() {
+          return MesAppareilsCard.buildForm(key);
+        }
+      }
+    );
+  }
+  window.customCards.push({
+    type: tag,
+    name: def.label,
+    description: `Carte animée : ${def.label.toLowerCase()}`,
+    preview: false,
+  });
+}
