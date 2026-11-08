@@ -11,6 +11,7 @@
 const ACTIVE_STATES = [
   'on', 'running', 'printing', 'washing', 'drying', 'heating', 'cooling',
   'active', 'in_progress', 'prepare', 'cleaning', 'charging', 'opening', 'closing',
+  'mowing', 'heat', 'cool', 'heat_cool', 'auto', 'dry', 'fan_only',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -35,6 +36,12 @@ const blades = (cx, cy, r, n = 4, fill = '#9aa5b3') => {
   }
   return `<path fill="${fill}" d="${d}"/>`;
 };
+
+// Couleurs rapides pour les ampoules colorées
+const PRESETS = [
+  ['#ff3b30', 'Rouge'], ['#ff9500', 'Orange'], ['#ffd60a', 'Jaune'], ['#34c759', 'Vert'],
+  ['#00c7be', 'Cyan'], ['#0a84ff', 'Bleu'], ['#bf5af2', 'Violet'], ['#ffd6a0', 'Blanc chaud'],
+];
 
 // Textes affichés sur les petits écrans
 const lcdPower = (v) => (v.on && v.power !== null ? `${Math.round(v.power)}W` : '--');
@@ -133,7 +140,7 @@ const APPLIANCES = {
   },
 
   colorbulb: {
-    label: 'Ampoule colorée', on: 'Allumée', off: 'Éteinte', threshold: 0.5, entityLabel: 'Ampoule (light.…)',
+    label: 'Ampoule colorée', color: true, on: 'Allumée', off: 'Éteinte', threshold: 0.5, entityLabel: 'Ampoule (light.…)',
     lcd: (v) =>
       v.st?.attributes?.brightness != null
         ? `${Math.round(v.st.attributes.brightness / 2.55)}%`
@@ -539,6 +546,7 @@ const APPLIANCES = {
   /* ---------------- Multimédia & informatique ---------------- */
   tv: {
     label: 'Téléviseur', on: 'Allumé', off: 'Éteint', threshold: 20, lcd: lcdPower,
+    activeStates: ['on', 'playing', 'paused', 'idle', 'buffering'],
     svg: `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -799,6 +807,44 @@ const APPLIANCES = {
   },
 };
 
+// Libellé du champ « entité » dans l'éditeur, selon l'appareil
+const ENTITY_LABELS = {
+  generic: 'Entité (switch, sensor…)',
+  smartplug: 'Prise (switch.…)',
+  bulb: 'Ampoule (light.…)',
+  washer: 'Prise (switch.…) ou état du cycle',
+  dryer: 'Prise (switch.…) ou état du cycle',
+  dishwasher: 'Prise (switch.…) ou état du cycle',
+  fridge: 'Prise (switch.…) — facultatif',
+  freezer: 'Prise (switch.…) — facultatif',
+  waterheater: 'Ballon (water_heater.… ou switch.…)',
+  oven: 'Four (switch.… ou climate.…)',
+  microwave: 'Prise (switch.…)',
+  hob: 'Prise (switch.…) ou état',
+  coffee: 'Prise (switch.…)',
+  hood: 'Hotte (fan.… ou switch.…)',
+  radiator: 'Radiateur (climate.… ou switch.…)',
+  towelrail: 'Sèche-serviettes (climate.… ou switch.…)',
+  ac: 'Climatiseur (climate.…)',
+  vmc: 'VMC (fan.… ou switch.…)',
+  fan: 'Ventilateur (fan.… ou switch.…)',
+  poolpump: 'Pompe (switch.…)',
+  tv: 'Téléviseur (media_player.…)',
+  homelab: 'Prise (switch.…) — facultatif',
+  pc: 'Prise (switch.…) ou état',
+  linky: 'Entité (facultatif)',
+  linkytempo: 'Entité (facultatif)',
+  solarbattery: 'Entité (sensor.… facultatif)',
+  evcharger: 'Borne (switch.…)',
+  vacuum: 'Aspirateur (vacuum.…)',
+  mower: 'Tondeuse (lawn_mower.…)',
+  toolcharger: 'Prise (switch.…)',
+  printer: 'Imprimante (sensor.… ou switch.…)',
+};
+for (const [k, l] of Object.entries(ENTITY_LABELS)) {
+  if (APPLIANCES[k] && !APPLIANCES[k].entityLabel) APPLIANCES[k].entityLabel = l;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Styles communs                                                     */
 /* ------------------------------------------------------------------ */
@@ -815,6 +861,25 @@ ha-card{--ac-accent:var(--primary-color);overflow:hidden;cursor:pointer}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{background:var(--secondary-background-color);border-radius:12px;
   padding:3px 10px;font-size:.8rem;color:var(--primary-text-color)}
+
+/* Commandes */
+[hidden]{display:none!important}
+.controls{display:flex;flex-direction:column;gap:10px;padding:0 16px 16px}
+.controls.off{opacity:.5;pointer-events:none}
+.row{display:flex;align-items:center;gap:10px}
+.row ha-icon{color:var(--secondary-text-color);--mdc-icon-size:20px;flex:none}
+.btn{border:none;border-radius:50%;width:40px;height:40px;display:inline-flex;
+  align-items:center;justify-content:center;background:var(--secondary-background-color);
+  color:var(--primary-text-color);cursor:pointer;--mdc-icon-size:22px;flex:none;padding:0}
+.btn ha-icon{color:inherit}
+.btn.active{background:var(--ac-accent);color:var(--text-primary-color,#fff)}
+.btn:active{transform:scale(.94)}
+input[type=range]{flex:1;min-width:0;accent-color:var(--ac-accent)}
+.val{min-width:46px;text-align:right;font-size:.85rem;color:var(--secondary-text-color)}
+.tgt{min-width:64px;text-align:center;font-size:1rem;font-weight:500;color:var(--primary-text-color)}
+input[type=color]{width:40px;height:32px;border:none;background:none;padding:0;cursor:pointer;flex:none}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.sw{width:24px;height:24px;border-radius:50%;border:2px solid var(--divider-color);cursor:pointer;padding:0}
 
 /* Palette des illustrations */
 .body{fill:#f2f4f7;stroke:#aab3bf;stroke-width:1.2}
@@ -910,6 +975,7 @@ class MesAppareilsCard extends HTMLElement {
       tempo_tomorrow: 'Couleur Tempo demain (capteur)',
       hc: 'Heures creuses (capteur HC/HP)',
       threshold: 'Seuil « en marche » (W)',
+      hide_controls: 'Masquer les commandes',
     };
     const sensor = (name) => ({ name, selector: { entity: { domain: 'sensor' } } });
     const schema = [];
@@ -937,7 +1003,10 @@ class MesAppareilsCard extends HTMLElement {
         schema.push({ name: n, selector: { entity: { domain: ['sensor', 'binary_sensor'] } } });
       }
     });
-    schema.push({ name: 'threshold', selector: { number: { min: 0, max: 5000, mode: 'box' } } });
+    schema.push(
+      { name: 'threshold', selector: { number: { min: 0, max: 5000, mode: 'box' } } },
+      { name: 'hide_controls', selector: { boolean: {} } }
+    );
     return { schema, computeLabel: (sc) => labels[sc.name] || sc.name };
   }
 
@@ -988,9 +1057,11 @@ class MesAppareilsCard extends HTMLElement {
             <div class="chips"></div>
           </div>
         </div>
+        ${this._controlsHTML(def, c)}
       </ha-card>`;
     const card = root.querySelector('ha-card');
     if (c.color) card.style.setProperty('--ac-accent', c.color);
+    this._bindControls(root);
     card.addEventListener('click', () => {
       const entityId = c.entity || c.power;
       if (!entityId) return;
@@ -999,6 +1070,164 @@ class MesAppareilsCard extends HTMLElement {
       this.dispatchEvent(ev);
     });
     this._built = true;
+  }
+
+  /* ---------- commandes (selon le type d'entité) ---------- */
+  _controlsHTML(def, c) {
+    if (c.hide_controls || !c.entity) return '';
+    const d = c.entity.split('.')[0];
+    const ic = (n) => `<ha-icon icon="mdi:${n}"></ha-icon>`;
+    const btn = (act, icon, title) =>
+      `<button class="btn" data-act="${act}" title="${title}">${ic(icon)}</button>`;
+    const rng = (act, icon, min, max, step = 1) =>
+      `<div class="row" data-row="${act}">${ic(icon)}<input type="range" data-act="${act}" min="${min}" max="${max}" step="${step}"><span class="val" data-val="${act}"></span></div>`;
+    let html = '';
+    if (d === 'light') {
+      html += `<div class="row">${btn('toggle', 'power', 'Allumer / éteindre')}</div>`;
+      html += rng('brightness', 'brightness-6', 1, 100);
+      if (def.color) {
+        html += `<div class="row" data-row="color"><input type="color" data-act="color" title="Couleur"><div class="swatches">${PRESETS.map(
+          ([hex, n]) => `<button class="sw" data-act="preset" data-hex="${hex}" title="${n}" style="background:${hex}"></button>`
+        ).join('')}</div></div>`;
+      } else {
+        html += rng('ctemp', 'thermometer', 2000, 6500, 50);
+      }
+    } else if (d === 'cover') {
+      html += `<div class="row">${btn('open', 'arrow-up', 'Monter')}${btn('stop', 'stop', 'Stop')}${btn('close', 'arrow-down', 'Descendre')}</div>`;
+      html += rng('pos', 'window-shutter', 0, 100);
+    } else if (d === 'climate') {
+      html += `<div class="row">${btn('toggle', 'power', 'Marche / arrêt')}${btn('tminus', 'minus', 'Moins')}<span class="tgt" data-val="tgt"></span>${btn('tplus', 'plus', 'Plus')}</div>`;
+    } else if (d === 'fan') {
+      html += `<div class="row">${btn('toggle', 'power', 'Marche / arrêt')}</div>`;
+      html += rng('speed', 'fan', 1, 100);
+    } else if (d === 'vacuum' || d === 'lawn_mower') {
+      html += `<div class="row">${btn('start', 'play', 'Démarrer')}${btn('pause', 'pause', 'Pause')}${btn('dock', 'home-import-outline', 'Retour à la base')}</div>`;
+    } else if (['switch', 'input_boolean', 'media_player', 'humidifier', 'siren', 'water_heater'].includes(d)) {
+      html += `<div class="row">${btn('toggle', 'power', 'Marche / arrêt')}</div>`;
+    } else if (d === 'button') {
+      html += `<div class="row">${btn('press', 'gesture-tap-button', 'Appuyer')}</div>`;
+    }
+    return html ? `<div class="controls">${html}</div>` : '';
+  }
+
+  _bindControls(root) {
+    const ctl = root.querySelector('.controls');
+    if (!ctl) return;
+    ctl.addEventListener('click', (e) => {
+      e.stopPropagation(); // ne pas ouvrir la fiche de l'entité
+      const b = e.target.closest('button[data-act]');
+      if (b) this._act(b.dataset.act, b);
+    });
+    ctl.addEventListener('input', (e) => {
+      const i = e.target.closest('input[data-act]');
+      if (!i) return;
+      this._busyUntil = Date.now() + 2500;
+      this._showVal(i);
+    });
+    ctl.addEventListener('change', (e) => {
+      const i = e.target.closest('input[data-act]');
+      if (!i) return;
+      this._busyUntil = Date.now() + 1200;
+      this._act(i.dataset.act, i);
+    });
+  }
+
+  _showVal(i) {
+    const unit = { brightness: ' %', ctemp: ' K', pos: ' %', speed: ' %' }[i.dataset.act] || '';
+    const span = this.shadowRoot.querySelector(`[data-val="${i.dataset.act}"]`);
+    if (span) span.textContent = `${i.value}${unit}`;
+  }
+
+  _act(act, el) {
+    const h = this._hass;
+    const id = this._config.entity;
+    const st = h.states[id];
+    if (!st) return;
+    const d = id.split('.')[0];
+    const call = (service, data = {}) => h.callService(d, service, { entity_id: id, ...data });
+    const rgb = (hex) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
+    const a = st.attributes || {};
+    switch (act) {
+      case 'toggle': return call(this._isOn(st) ? 'turn_off' : 'turn_on');
+      case 'brightness': return call('turn_on', { brightness_pct: Number(el.value) });
+      case 'ctemp': return call('turn_on', { color_temp_kelvin: Number(el.value) });
+      case 'color': return call('turn_on', { rgb_color: rgb(el.value) });
+      case 'preset': return call('turn_on', { rgb_color: rgb(el.dataset.hex) });
+      case 'open': return call('open_cover');
+      case 'close': return call('close_cover');
+      case 'stop': return call('stop_cover');
+      case 'pos': return call('set_cover_position', { position: Number(el.value) });
+      case 'speed': return call('set_percentage', { percentage: Number(el.value) });
+      case 'tplus':
+      case 'tminus': {
+        const step = a.target_temp_step || 0.5;
+        let t = (a.temperature ?? a.current_temperature ?? 20) + (act === 'tplus' ? step : -step);
+        t = Math.min(a.max_temp ?? 35, Math.max(a.min_temp ?? 5, t));
+        return call('set_temperature', { temperature: Math.round(t * 10) / 10 });
+      }
+      case 'start': return call(d === 'lawn_mower' ? 'start_mowing' : 'start');
+      case 'pause': return call('pause');
+      case 'dock': return call(d === 'lawn_mower' ? 'dock' : 'return_to_base');
+      case 'press': return call('press');
+      default: return undefined;
+    }
+  }
+
+  _isOn(st) {
+    return !['off', 'unavailable', 'unknown'].includes(st.state);
+  }
+
+  _updateControls(st) {
+    const root = this.shadowRoot;
+    const ctl = root.querySelector('.controls');
+    if (!ctl || !st) return;
+    const d = this._config.entity.split('.')[0];
+    const a = st.attributes || {};
+    const s = st.state;
+    const busy = Date.now() < (this._busyUntil || 0);
+    const q = (sel) => ctl.querySelector(sel);
+    const row = (n) => q(`[data-row="${n}"]`);
+    const active = (n, on) => q(`[data-act="${n}"]`)?.classList.toggle('active', on);
+    const setRange = (act, val, min, max) => {
+      const i = q(`input[data-act="${act}"]`);
+      if (!i) return;
+      if (min != null) { i.min = min; i.max = max; }
+      if (!busy) i.value = val;
+      this._showVal(i);
+    };
+    ctl.classList.toggle('off', s === 'unavailable');
+    active('toggle', this._isOn(st));
+
+    if (d === 'light') {
+      const modes = a.supported_color_modes || [];
+      if (row('brightness')) row('brightness').hidden = !modes.some((m) => m !== 'onoff');
+      if (row('color')) row('color').hidden = !modes.some((m) => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].includes(m));
+      if (row('ctemp')) row('ctemp').hidden = !modes.includes('color_temp');
+      setRange('brightness', a.brightness != null ? Math.round(a.brightness / 2.55) : 1);
+      setRange('ctemp', a.color_temp_kelvin ?? 3000, a.min_color_temp_kelvin ?? 2000, a.max_color_temp_kelvin ?? 6500);
+      const ci = q('input[data-act="color"]');
+      if (ci && Array.isArray(a.rgb_color) && !busy) {
+        ci.value = `#${a.rgb_color.map((x) => Number(x).toString(16).padStart(2, '0')).join('')}`;
+      }
+    } else if (d === 'cover') {
+      if (row('pos')) row('pos').hidden = a.current_position == null;
+      setRange('pos', a.current_position ?? 0);
+      active('open', s === 'opening');
+      active('close', s === 'closing');
+    } else if (d === 'climate') {
+      const t = q('[data-val="tgt"]');
+      if (t) t.textContent = a.temperature != null ? `${a.temperature} °C` : '--';
+      active('toggle', s !== 'off');
+    } else if (d === 'fan') {
+      if (row('speed')) row('speed').hidden = a.percentage == null;
+      setRange('speed', a.percentage ?? 0);
+    } else if (d === 'vacuum') {
+      active('start', s === 'cleaning'); active('pause', s === 'paused');
+      active('dock', s === 'docked' || s === 'returning');
+    } else if (d === 'lawn_mower') {
+      active('start', s === 'mowing'); active('pause', s === 'paused');
+      active('dock', s === 'docked' || s === 'returning');
+    }
   }
 
   /* ---------- helpers ---------- */
@@ -1010,9 +1239,9 @@ class MesAppareilsCard extends HTMLElement {
     return Number.isNaN(v) ? null : v;
   }
 
-  _fmt(v) {
+  _fmt(v, digits = 1) {
     return Number(v).toLocaleString(this._hass.locale?.language || 'fr', {
-      maximumFractionDigits: 1,
+      maximumFractionDigits: digits,
     });
   }
 
@@ -1034,7 +1263,7 @@ class MesAppareilsCard extends HTMLElement {
     // Capteur de puissance prioritaire (cas d'une simple prise connectée)
     let on = false;
     if (power !== null) on = power > threshold;
-    else if (st) on = ACTIVE_STATES.includes(st.state);
+    else if (st) on = (def.activeStates || ACTIVE_STATES).includes(st.state);
 
     const open = c.door ? h.states[c.door]?.state === 'on' : false;
     card.classList.toggle('on', on && !unavailable);
@@ -1066,14 +1295,14 @@ class MesAppareilsCard extends HTMLElement {
       const e = h.states[c.energy];
       const ev = this._num(c.energy);
       if (e && ev !== null) {
-        chips.push(`${this._fmt(ev)} ${e.attributes.unit_of_measurement || 'kWh'}`);
+        chips.push(`Conso ${this._fmt(ev, 2)} ${e.attributes.unit_of_measurement || 'kWh'}`);
       }
     }
     if (temp !== null) chips.push(`${this._fmt(temp)} °C`);
     const costVal = this._num(c.cost);
     if (costVal !== null) {
       const cu = h.states[c.cost].attributes.unit_of_measurement;
-      chips.push(`Coût ${this._fmt(costVal)} ${!cu || cu === 'EUR' ? '€' : cu}`);
+      chips.push(`Coût ${this._fmt(costVal, 2)} ${!cu || cu === 'EUR' ? '€' : cu}`);
     }
     if (prog !== null) chips.push(`${def.battery ? 'Batterie' : 'Progression'} ${this._fmt(prog)} %`);
     if (c.remaining) {
@@ -1091,6 +1320,7 @@ class MesAppareilsCard extends HTMLElement {
         return d;
       })
     );
+    this._updateControls(st);
   }
 }
 
