@@ -2,7 +2,7 @@
 
 Carte Lovelace animée en SVG pour suivre la consommation, la température et l'état de tes appareils électroménagers, multimédia et domotiques dans Home Assistant.
 
-![Aperçu](https://raw.githubusercontent.com/USERNAME/mes-appareils-card/main/preview.png)
+![Aperçu](https://raw.githubusercontent.com/Yod-g/mes-appareils-card/main/preview.png)
 
 ## 🛠️ Installation via HACS
 
